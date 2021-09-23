@@ -42,7 +42,8 @@ if (-e $filename) {
 
     for my $previous_follower (@$previous_followers) {
         unless (grep {$previous_follower->{id} == $_->{id}} @$current_followers) {
-            my $text = 'User unfollowed: '. $previous_follower->{acct}. ', '. $previous_follower->{url};
+            my $local_url = 'https://'. $config->{mastodon}{domain}. '/web/accounts/'. $previous_follower->{id};
+            my $text = 'User unfollowed: '. $previous_follower->{acct}. ', '. $previous_follower->{url}. ', '. $local_url;
             print $text. "\n";
             $furl->post($config->{slack_notify_url}, [], [payload => encode_json({text => $text})]);
         }
