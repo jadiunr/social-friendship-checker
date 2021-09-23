@@ -1,0 +1,58 @@
+#!/bin/perl
+
+use strict;
+use warnings;
+use utf8;
+use Furl;
+use JSON::XS;
+use YAML::XS 'LoadFile';
+
+print "Friendship checker: begin\n";
+
+my $config = LoadFile 'config.yml';
+my $filename = 'followers.txt';
+my $furl = Furl->new();
+
+my $current_followers = [];
+my $max_id;
+
+while (1) {
+    my $followers = $furl->get(
+        "https://". $config->{mastodon}{domain}. "/api/v1/accounts/". $config->{mastodon}{account_id}. "/followers?limit=40". (defined($max_id) ? "&max_id=$max_id" : ''),
+        ['Authorization' => "Bearer ". $config->{mastodon}{token}]
+    );
+    push(@$current_followers, @{ decode_json $followers->content });
+    last unless $followers->headers->{link}[0] =~ /max_id=(\d+)/;
+    $max_id = $1;
+    print 'Fetching current followers: max_id=', $max_id, "\n";
+}
+
+if (-e $filename) {
+    my $previous_followers = [];
+    open my $fh, "<", $filename;
+
+    while (my $line = <$fh>) {
+        $line = [split ' ', $line];
+        my $previous_follower;
+        $previous_follower->{id} = $line->[0];
+        $previous_follower->{acct} = $line->[1];
+        $previous_follower->{url} = $line->[2];
+        push(@$previous_followers, $previous_follower);
+    }
+
+    for my $previous_follower (@$previous_followers) {
+        unless (grep {$previous_follower->{id} == $_->{id}} @$current_followers) {
+            my $text = 'User unfollowed: '. $previous_follower->{acct}. ', '. $previous_follower->{url};
+            print $text. "\n";
+            $furl->post($config->{slack_notify_url}, [], [payload => encode_json({text => $text})]);
+        }
+    }
+
+    close $fh;
+}
+
+open my $fh, ">", $filename;
+print $fh join(' ', ($_->{id}, $_->{acct}, $_->{url})). "\n" for @$current_followers;
+close $fh;
+
+print "Friendship checker: done\n";
