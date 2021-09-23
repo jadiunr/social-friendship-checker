@@ -1,0 +1,5 @@
+mastodon:
+  domain:
+  account_id:
+  token:
+slack_notify_url:
